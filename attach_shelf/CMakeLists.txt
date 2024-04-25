@@ -22,12 +22,15 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-add_executable(pre_approach_node src/pre_approach.cpp)
-ament_target_dependencies(pre_approach_node rclcpp geometry_msgs sensor_msgs)
+add_executable(pre_approach src/pre_approach.cpp)
+ament_target_dependencies(pre_approach rclcpp geometry_msgs sensor_msgs)
 
-install(TARGETS
-  pre_approach_node
+install(TARGETS pre_approach
   DESTINATION lib/${PROJECT_NAME}
+)
+
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
 )
 
 ament_package()
