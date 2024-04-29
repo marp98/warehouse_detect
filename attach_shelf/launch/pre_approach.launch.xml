@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <launch>
-  <node pkg="attach_self" exec="pre_approach" name="pre_approach">
+  <node pkg="attach_shelf" exec="pre_approach" name="pre_approach">
     <param name="obstacle" value="$(var obstacle)" />
     <param name="degrees" value="$(var degrees)" />
   </node>
