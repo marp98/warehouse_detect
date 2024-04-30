@@ -13,6 +13,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -28,7 +29,12 @@ endif()
 add_executable(pre_approach src/pre_approach.cpp)
 ament_target_dependencies(pre_approach rclcpp sensor_msgs geometry_msgs nav_msgs tf2 tf2_geometry_msgs)
 
-install(TARGETS pre_approach
+add_executable(approach_shelf_server src/approach_service_server.cpp)
+ament_target_dependencies(approach_shelf_server rclcpp std_srvs)
+
+install(TARGETS 
+  pre_approach
+  approach_shelf_server
   DESTINATION lib/${PROJECT_NAME}
 )
 
