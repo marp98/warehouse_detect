@@ -31,7 +31,7 @@ add_executable(pre_approach src/pre_approach.cpp)
 ament_target_dependencies(pre_approach rclcpp sensor_msgs geometry_msgs nav_msgs tf2 tf2_geometry_msgs)
 
 add_executable(approach_shelf_server src/approach_service_server.cpp)
-ament_target_dependencies(approach_shelf_server rclcpp std_srvs approach_shelf_msg)
+ament_target_dependencies(approach_shelf_server rclcpp std_srvs approach_shelf_msg sensor_msgs)
 
 install(TARGETS 
   pre_approach
