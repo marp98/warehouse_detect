@@ -1,31 +1,46 @@
-#include <rclcpp/rclcpp.hpp>
-#include <std_srvs/srv/trigger.hpp>
+#include "rclcpp/rclcpp.hpp"
+#include "approach_shelf_msg/srv/go_to_loading.hpp"
 
-class ApproachShelfServer : public rclcpp::Node {
+#include <memory>
+
+using GoToLoading = approach_shelf_msg::srv::GoToLoading;
+using std::placeholders::_1;
+using std::placeholders::_2;
+
+class ServerNode : public rclcpp::Node
+{
 public:
-    ApproachShelfServer() : Node("approach_shelf_server") {
-        approach_shelf_service_ = this->create_service<std_srvs::srv::Trigger>(
-            "/approach_shelf",
-            std::bind(&ApproachShelfServer::approachShelfCallback, this, std::placeholders::_1, std::placeholders::_2));
-        RCLCPP_INFO(this->get_logger(), "Approach Shelf Service Server ready.");
-    }
+  ServerNode()
+  : Node("approach_shelf_server")
+  {
+
+    srv_ = create_service<GoToLoading>("approach_shelf", std::bind(&ServerNode::approach_callback, this, _1, _2));
+
+  }
 
 private:
-    void approachShelfCallback(const std_srvs::srv::Trigger::Request::SharedPtr request,
-                               const std_srvs::srv::Trigger::Response::SharedPtr response) {
-        (void)request;  // Unused parameter
-        response->success = true;
-        response->message = "Approach Shelf service called.";
-        RCLCPP_INFO(this->get_logger(), "Approach Shelf service called. Returning true.");
-    }
+  rclcpp::Service<GoToLoading>::SharedPtr srv_;
 
-    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr approach_shelf_service_;
+  void approach_callback(
+      const std::shared_ptr<GoToLoading::Request> request,
+      const std::shared_ptr<GoToLoading::Response>
+          response) 
+    {    
+        if (request->attach_to_shelf == true)
+        {       
+            response->complete = true;
+        }
+        else if (request->attach_to_shelf == false)
+        {
+            response->complete = false;
+        }                
+    }
 };
 
-int main(int argc, char** argv) {
-    rclcpp::init(argc, argv);
-    auto node = std::make_shared<ApproachShelfServer>();
-    rclcpp::spin(node);
-    rclcpp::shutdown();
-    return 0;
+int main(int argc, char * argv[])
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<ServerNode>());
+  rclcpp::shutdown();
+  return 0;
 }
