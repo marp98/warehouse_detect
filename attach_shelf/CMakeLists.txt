@@ -10,6 +10,9 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -23,7 +26,7 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(pre_approach src/pre_approach.cpp)
-ament_target_dependencies(pre_approach rclcpp sensor_msgs geometry_msgs)
+ament_target_dependencies(pre_approach rclcpp sensor_msgs geometry_msgs nav_msgs tf2 tf2_geometry_msgs)
 
 install(TARGETS pre_approach
   DESTINATION lib/${PROJECT_NAME}
