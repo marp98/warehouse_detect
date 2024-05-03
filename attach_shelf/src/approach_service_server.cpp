@@ -24,8 +24,6 @@ public:
         srv_ = create_service<GoToLoading>("approach_shelf", std::bind(&ServerNode::approach_callback, this, _1, _2));
         laser_scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
             "scan", 10, std::bind(&ServerNode::laser_scan_callback, this, _1));
-        odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
-            "/odom", 10, std::bind(&ServerNode::odomCallback, this, std::placeholders::_1));
         cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/robot/cmd_vel", 10);
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
         tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
@@ -34,13 +32,13 @@ public:
         kp_distance_ = 0.0;
         kp_yaw_ = 1.4;
         distance_threshold_ = 0.05;
+        approach_completed_ = false;
     }
 
 private:
     rclcpp::Service<GoToLoading>::SharedPtr srv_;
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_scan_sub_;
     sensor_msgs::msg::LaserScan::SharedPtr last_scan_;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     std::vector<float> leg_locations_;
@@ -49,6 +47,7 @@ private:
     double kp_distance_;
     double kp_yaw_;
     double distance_threshold_;
+    bool approach_completed_;
 
     void approach_callback(const std::shared_ptr<GoToLoading::Request> request,
                        const std::shared_ptr<GoToLoading::Response> response) {
@@ -105,6 +104,10 @@ private:
                 transform.transform.rotation.w = 1.0;
 
                 tf_broadcaster_->sendTransform(transform);
+
+                while (!approach_completed_) {
+                    move_robot();
+                }
                 
                 response->complete = true;
                 RCLCPP_INFO(get_logger(), "Shelf legs detected. Approaching complete.");
@@ -122,37 +125,61 @@ private:
         last_scan_ = msg;
     }
 
-    void odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
-        geometry_msgs::msg::TransformStamped transform;
+    void move_robot() {
+        geometry_msgs::msg::TransformStamped transform_odom_to_robot;
         try {
-            transform = tf_buffer_->lookupTransform(
-                "robot_base_link", "cart_frame", tf2::TimePointZero);
+            transform_odom_to_robot = tf_buffer_->lookupTransform(
+                "robot_odom", "robot_base_link", tf2::TimePointZero);
         } catch (const tf2::TransformException &ex) {
             RCLCPP_ERROR(get_logger(), "Could not get transform: %s", ex.what());
             return;
         }
 
-        double dist = sqrt(pow(transform.transform.translation.x, 2) +
-                        pow(transform.transform.translation.y, 2));
-        double error_yaw = atan2(transform.transform.translation.y,
-                                transform.transform.translation.x);
+        double dist_odom_to_robot = sqrt(pow(transform_odom_to_robot.transform.translation.x, 2) +
+                        pow(transform_odom_to_robot.transform.translation.y, 2));
+        double error_yaw_odom_to_robot = atan2(transform_odom_to_robot.transform.translation.y,
+                                transform_odom_to_robot.transform.translation.x);
 
-        double angular_velocity = kp_yaw_ * error_yaw;
+        RCLCPP_INFO(get_logger(), "Distance odom to robot: %f", dist_odom_to_robot);
+
+        geometry_msgs::msg::TransformStamped transform_odom_to_cart;
+        try {
+            transform_odom_to_cart = tf_buffer_->lookupTransform(
+                "robot_odom", "cart_frame", tf2::TimePointZero);
+        } catch (const tf2::TransformException &ex) {
+            RCLCPP_ERROR(get_logger(), "Could not get transform: %s", ex.what());
+            return;
+        }
+
+        double dist_odom_to_cart = sqrt(pow(transform_odom_to_cart.transform.translation.x, 2) +
+                        pow(transform_odom_to_cart.transform.translation.y, 2));
+        double error_yaw_odom_to_cart = atan2(transform_odom_to_cart.transform.translation.y,
+                                transform_odom_to_cart.transform.translation.x);
+
+        RCLCPP_INFO(get_logger(), "Distance odom to cart: %f", dist_odom_to_cart);
+
+        double angular_velocity = kp_yaw_ * error_yaw_odom_to_robot;
         double linear_velocity = 0.0;
 
-        RCLCPP_INFO(get_logger(), "Distance: %f", dist);
+        double dist_robot_to_cart = sqrt(
+            pow(dist_odom_to_robot, 2) + pow(dist_odom_to_cart, 2) -
+            2 * dist_odom_to_robot * dist_odom_to_cart * cos(error_yaw_odom_to_cart - error_yaw_odom_to_robot)
+        );
 
-        if (dist > distance_threshold_) {
+        RCLCPP_INFO(get_logger(), "Distance: %f", dist_robot_to_cart);
+
+        if (dist_robot_to_cart > distance_threshold_) {
             kp_distance_ = 1.06;
-            linear_velocity = std::max(kp_distance_ * dist, 0.7);
+            linear_velocity = std::max(kp_distance_ * dist_robot_to_cart, 0.7);
         } else {
             kp_distance_ = 0.0;
-            linear_velocity = kp_distance_ * dist;
+            linear_velocity = kp_distance_ * dist_robot_to_cart;
+            approach_completed_ = true;
         }
 
         geometry_msgs::msg::Twist twist;
         twist.linear.x = linear_velocity;
-        twist.angular.z = angular_velocity;
+        twist.angular.z = 0.0;
         cmd_vel_pub_->publish(twist);
     }
 
@@ -178,24 +205,24 @@ private:
             const auto angle = last_scan_->angle_min + i * last_scan_->angle_increment;
 
             if (intensity > intensity_threshold) {
-            if (!in_group) {
-                num_shelf_legs++;
-                in_group = true;
-                group_start_angle = angle;
-                group_start_range = range;
-            }
-            group_end_angle = angle;
-            group_end_range = range;
+                if (!in_group) {
+                    num_shelf_legs++;
+                    in_group = true;
+                    group_start_angle = angle;
+                    group_start_range = range;
+                }
+                group_end_angle = angle;
+                group_end_range = range;
             } else {
-            if (in_group) {
-                float group_center_angle = (group_start_angle + group_end_angle) / 2.0;
-                float group_center_range = (group_start_range + group_end_range) / 2.0;
-                float leg_x = group_center_range * std::cos(group_center_angle);
-                float leg_y = group_center_range * std::sin(group_center_angle);
-                leg_locations_.push_back(leg_x);
-                leg_locations_.push_back(leg_y);
-            }
-            in_group = false;
+                if (in_group) {
+                    float group_center_angle = (group_start_angle + group_end_angle) / 2.0;
+                    float group_center_range = (group_start_range + group_end_range) / 2.0;
+                    float leg_x = group_center_range * std::cos(group_center_angle);
+                    float leg_y = group_center_range * std::sin(group_center_angle);
+                    leg_locations_.push_back(leg_x);
+                    leg_locations_.push_back(leg_y);
+                }
+                in_group = false;
             }
         }
 
