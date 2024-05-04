@@ -14,6 +14,7 @@ find_package(nav_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(approach_shelf_msg REQUIRED)
+find_package(std_msgs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -38,6 +39,7 @@ ament_target_dependencies(approach_shelf_server
   geometry_msgs
   tf2
   tf2_ros
+  std_msgs
 )
 
 

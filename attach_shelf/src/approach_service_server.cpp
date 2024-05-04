@@ -6,6 +6,7 @@
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include "geometry_msgs/msg/pose2_d.hpp"
+#include "std_msgs/msg/empty.hpp"
 #include <tf2_ros/transform_listener.h>
 #include <nav_msgs/msg/odometry.hpp>
 #include <tf2/convert.h>
@@ -26,6 +27,7 @@ public:
         laser_scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
             "scan", 10, std::bind(&ServerNode::laser_scan_callback, this, _1));
         cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/robot/cmd_vel", 10);
+        elevator_up_pub_ = this->create_publisher<std_msgs::msg::Empty>("/elevator_up", 10);
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
         tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
         transform_listener_ =
@@ -41,6 +43,7 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_scan_sub_;
     sensor_msgs::msg::LaserScan::SharedPtr last_scan_;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
+    rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr elevator_up_pub_;
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     std::vector<float> leg_locations_;
     std::unique_ptr<tf2_ros::TransformListener> transform_listener_;
@@ -107,6 +110,9 @@ private:
                 tf_broadcaster_->sendTransform(transform);
 
                 move_robot();
+
+                std_msgs::msg::Empty empty_msg;
+                elevator_up_pub_->publish(empty_msg);
                 
                 response->complete = true;
                 RCLCPP_INFO(get_logger(), "Shelf legs detected. Approaching complete.");
