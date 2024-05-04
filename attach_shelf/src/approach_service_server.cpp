@@ -5,6 +5,7 @@
 #include <tf2_ros/buffer.h>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include "geometry_msgs/msg/pose2_d.hpp"
 #include <tf2_ros/transform_listener.h>
 #include <nav_msgs/msg/odometry.hpp>
 #include <tf2/convert.h>
@@ -105,9 +106,7 @@ private:
 
                 tf_broadcaster_->sendTransform(transform);
 
-                while (!approach_completed_) {
-                    move_robot();
-                }
+                move_robot();
                 
                 response->complete = true;
                 RCLCPP_INFO(get_logger(), "Shelf legs detected. Approaching complete.");
@@ -126,61 +125,84 @@ private:
     }
 
     void move_robot() {
-        geometry_msgs::msg::TransformStamped transform_odom_to_robot;
-        try {
-            transform_odom_to_robot = tf_buffer_->lookupTransform(
-                "robot_odom", "robot_base_link", tf2::TimePointZero);
-        } catch (const tf2::TransformException &ex) {
-            RCLCPP_ERROR(get_logger(), "Could not get transform: %s", ex.what());
-            return;
+        while (!approach_completed_) {
+            geometry_msgs::msg::TransformStamped transform_odom_to_robot;
+            try {
+                transform_odom_to_robot = tf_buffer_->lookupTransform(
+                    "robot_odom", "robot_base_link", tf2::TimePointZero);
+            } catch (const tf2::TransformException &ex) {
+                RCLCPP_ERROR(get_logger(), "Could not get transform: %s", ex.what());
+                return;
+            }
+
+            double dist_odom_to_robot = sqrt(pow(transform_odom_to_robot.transform.translation.x, 2) +
+                            pow(transform_odom_to_robot.transform.translation.y, 2));
+            double error_yaw_odom_to_robot = atan2(transform_odom_to_robot.transform.translation.y,
+                                    transform_odom_to_robot.transform.translation.x);
+
+            RCLCPP_INFO(get_logger(), "Distance odom to robot: %f", dist_odom_to_robot);
+
+            geometry_msgs::msg::TransformStamped transform_odom_to_cart;
+            try {
+                transform_odom_to_cart = tf_buffer_->lookupTransform(
+                    "robot_odom", "cart_frame", tf2::TimePointZero);
+            } catch (const tf2::TransformException &ex) {
+                RCLCPP_ERROR(get_logger(), "Could not get transform: %s", ex.what());
+                return;
+            }
+
+            double dist_odom_to_cart = sqrt(pow(transform_odom_to_cart.transform.translation.x, 2) +
+                            pow(transform_odom_to_cart.transform.translation.y, 2));
+            double error_yaw_odom_to_cart = atan2(transform_odom_to_cart.transform.translation.y,
+                                    transform_odom_to_cart.transform.translation.x);
+
+            RCLCPP_INFO(get_logger(), "Distance odom to cart: %f", dist_odom_to_cart);
+
+            double angular_velocity = kp_yaw_ * error_yaw_odom_to_robot;
+            double linear_velocity = 0.0;
+
+            double dist_robot_to_cart = sqrt(
+                pow(dist_odom_to_robot, 2) + pow(dist_odom_to_cart, 2) -
+                2 * dist_odom_to_robot * dist_odom_to_cart * cos(error_yaw_odom_to_cart - error_yaw_odom_to_robot)
+            );
+
+            RCLCPP_INFO(get_logger(), "Distance: %f", dist_robot_to_cart);
+
+            if (dist_robot_to_cart > distance_threshold_) {
+                kp_distance_ = 1.06;
+                linear_velocity = std::max(kp_distance_ * dist_robot_to_cart, 0.7);
+            } else {
+                kp_distance_ = 0.0;
+                linear_velocity = kp_distance_ * dist_robot_to_cart;
+                
+                geometry_msgs::msg::Twist extra_twist;
+                extra_twist.linear.x = 0.3;  
+                extra_twist.angular.z = 0.0;
+
+                double extra_distance = 0.9;  
+                double moved_distance = 0.0;
+                rclcpp::Rate extra_rate(10);  
+
+                auto start_time = now();
+                while (moved_distance < extra_distance) {
+                    cmd_vel_pub_->publish(extra_twist);
+                    extra_rate.sleep();
+                    auto current_time = now();
+                    auto duration = current_time - start_time;
+                    moved_distance = extra_twist.linear.x * duration.seconds();
+                }
+
+                extra_twist.linear.x = 0.0;
+                cmd_vel_pub_->publish(extra_twist);
+
+                approach_completed_ = true;
+            }
+
+            geometry_msgs::msg::Twist twist;
+            twist.linear.x = linear_velocity;
+            twist.angular.z = 0.0;
+            cmd_vel_pub_->publish(twist);
         }
-
-        double dist_odom_to_robot = sqrt(pow(transform_odom_to_robot.transform.translation.x, 2) +
-                        pow(transform_odom_to_robot.transform.translation.y, 2));
-        double error_yaw_odom_to_robot = atan2(transform_odom_to_robot.transform.translation.y,
-                                transform_odom_to_robot.transform.translation.x);
-
-        RCLCPP_INFO(get_logger(), "Distance odom to robot: %f", dist_odom_to_robot);
-
-        geometry_msgs::msg::TransformStamped transform_odom_to_cart;
-        try {
-            transform_odom_to_cart = tf_buffer_->lookupTransform(
-                "robot_odom", "cart_frame", tf2::TimePointZero);
-        } catch (const tf2::TransformException &ex) {
-            RCLCPP_ERROR(get_logger(), "Could not get transform: %s", ex.what());
-            return;
-        }
-
-        double dist_odom_to_cart = sqrt(pow(transform_odom_to_cart.transform.translation.x, 2) +
-                        pow(transform_odom_to_cart.transform.translation.y, 2));
-        double error_yaw_odom_to_cart = atan2(transform_odom_to_cart.transform.translation.y,
-                                transform_odom_to_cart.transform.translation.x);
-
-        RCLCPP_INFO(get_logger(), "Distance odom to cart: %f", dist_odom_to_cart);
-
-        double angular_velocity = kp_yaw_ * error_yaw_odom_to_robot;
-        double linear_velocity = 0.0;
-
-        double dist_robot_to_cart = sqrt(
-            pow(dist_odom_to_robot, 2) + pow(dist_odom_to_cart, 2) -
-            2 * dist_odom_to_robot * dist_odom_to_cart * cos(error_yaw_odom_to_cart - error_yaw_odom_to_robot)
-        );
-
-        RCLCPP_INFO(get_logger(), "Distance: %f", dist_robot_to_cart);
-
-        if (dist_robot_to_cart > distance_threshold_) {
-            kp_distance_ = 1.06;
-            linear_velocity = std::max(kp_distance_ * dist_robot_to_cart, 0.7);
-        } else {
-            kp_distance_ = 0.0;
-            linear_velocity = kp_distance_ * dist_robot_to_cart;
-            approach_completed_ = true;
-        }
-
-        geometry_msgs::msg::Twist twist;
-        twist.linear.x = linear_velocity;
-        twist.angular.z = 0.0;
-        cmd_vel_pub_->publish(twist);
     }
 
     bool detect_shelf_legs() {
