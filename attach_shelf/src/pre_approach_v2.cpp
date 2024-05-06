@@ -5,36 +5,51 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <geometry_msgs/msg/pose.hpp>
+#include "approach_shelf_msg/srv/go_to_loading.hpp"
+
+#include <chrono>
+#include <cstdlib>
+#include <memory>
+#include <iostream>
+
+using namespace std::chrono_literals;
+using GoToLoading = approach_shelf_msg::srv::GoToLoading;
 
 class PreApproach : public rclcpp::Node {
 public:
-    PreApproach() : Node("pre_approach"), is_rotating_(false), is_stopped_(false), start_pose_set_(false) {
+    PreApproach() : Node("pre_approach"), is_rotating_(false), is_stopped_(false), start_pose_set_(false), final_approach_performed_(false)  {
         this->declare_parameter("obstacle");
         this->declare_parameter("degrees");
+        this->declare_parameter("final_approach");
         obstacle_distance_ = this->get_parameter("obstacle").as_double();
         rotation_degrees_ = this->get_parameter("degrees").as_int();
+        final_approach_ = this->get_parameter("final_approach").as_bool();
 
         scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
             "/scan", 10, std::bind(&PreApproach::scanCallback, this, std::placeholders::_1));
         odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
             "/odom", 10, std::bind(&PreApproach::odomCallback, this, std::placeholders::_1));
         cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/robot/cmd_vel", 10);
+        approach_shelf_client_ = this->create_client<GoToLoading>("approach_shelf");
     }
 
 private:
     double obstacle_distance_;
     int rotation_degrees_;
+    bool final_approach_;
     bool is_rotating_;
     bool is_stopped_;
     bool start_pose_set_;
     double start_yaw_;
     double target_yaw_;
+    bool final_approach_performed_;
 
     geometry_msgs::msg::Pose start_pose_;
 
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
+    rclcpp::Client<GoToLoading>::SharedPtr approach_shelf_client_;
 
     void scanCallback(const sensor_msgs::msg::LaserScan::SharedPtr msg) {
         if (is_rotating_ || is_stopped_) {
@@ -80,8 +95,14 @@ private:
             stop_twist.linear.x = 0.0;
             stop_twist.angular.z = 0.0;
             cmd_vel_pub_->publish(stop_twist);
+
             is_rotating_ = false;
             is_stopped_ = true;
+
+            if (!final_approach_performed_) {
+                performFinalApproach();
+                final_approach_performed_ = true;
+            }
         } else {
             geometry_msgs::msg::Twist twist;
             twist.linear.x = 0.0;
@@ -101,6 +122,39 @@ private:
         m.getRPY(roll, pitch, yaw);
         start_yaw_ = yaw;
         target_yaw_ = start_yaw_ + rotation_degrees_ * M_PI / 180.0;
+    }
+
+    void performFinalApproach() {
+        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Performing final approach");
+        if (final_approach_) {
+                while (!approach_shelf_client_->wait_for_service(1s)) {
+                    if (!rclcpp::ok()) {
+                        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Interrupted while waiting for the service. Exiting.");
+                        return;
+                    }
+                    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "service not available, waiting again...");
+                }
+
+                auto request = std::make_shared<GoToLoading::Request>();
+                request->attach_to_shelf = final_approach_;
+
+                auto result_future = approach_shelf_client_->async_send_request(request);
+                result_future.wait();
+
+                if (result_future.get()) {
+                    auto result = result_future.get();
+                    if (result->complete)
+                    {
+                        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Service returned success");
+                    }
+                    else
+                    {
+                        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Service returned false");
+                    }
+                } else {
+                    RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to call service /approach_shelf");
+                }
+            }
     }
 };
 
