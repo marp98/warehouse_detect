@@ -11,17 +11,14 @@ class PreApproachNode : public rclcpp::Node
 public:
     PreApproachNode() : Node("pre_approach_node"), obstacle_distance_(0.3), rotation_degrees_(-90), initial_yaw_(0.0), start_pose_set_(false)
     {
-        // Parameters
         this->declare_parameter("obstacle", obstacle_distance_);
         this->declare_parameter("degrees", rotation_degrees_);
 
-        // Subscribers
         laser_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
             "/scan", 10, std::bind(&PreApproachNode::laserCallback, this, std::placeholders::_1));
         odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
             "/odom", 10, std::bind(&PreApproachNode::odomCallback, this, std::placeholders::_1));
 
-        // Publishers
         cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/robot/cmd_vel", 10);
     }
 
@@ -74,10 +71,13 @@ private:
             double roll, pitch, yaw;
             m.getRPY(roll, pitch, yaw);
 
-            if (std::abs(yaw - target_yaw_) < 0.1) {
+            double yaw_tolerance = 0.001;  
+
+            if (std::abs(yaw - target_yaw_) < yaw_tolerance) {
                 stopRobot();
                 is_rotating_ = false;
                 RCLCPP_INFO(this->get_logger(), "Rotation completed. Terminating the program");
+                RCLCPP_INFO(this->get_logger(), "Final Yaw: %.2f", yaw);
                 rclcpp::shutdown();
             } else {
                 rotateRobot();
@@ -102,16 +102,10 @@ private:
     }
 
     void setUpRotate() {
-        tf2::Quaternion q(
-            start_pose_.orientation.x,
-            start_pose_.orientation.y,
-            start_pose_.orientation.z,
-            start_pose_.orientation.w);
-        tf2::Matrix3x3 m(q);
-        double roll, pitch, yaw;
-        m.getRPY(roll, pitch, yaw);
-        start_yaw_ = yaw;
-        target_yaw_ = start_yaw_ + rotation_degrees_ * M_PI / 180.0;
+        double target_yaw = 0 + rotation_degrees_ * M_PI / 180.0;
+        target_yaw_ = target_yaw;
+
+        RCLCPP_INFO(this->get_logger(), "Target Yaw: %.2f", target_yaw_);
     }
 
     void rotateRobot()
