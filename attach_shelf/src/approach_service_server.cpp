@@ -12,9 +12,13 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
-
+#include <chrono>
+#include <thread>
 #include <cmath>
 #include <memory>
+
+using namespace std::this_thread; // sleep_for, sleep_until
+using namespace std::chrono; // nanoseconds, system_clock, seconds
 
 using GoToLoading = approach_shelf_msg::srv::GoToLoading;
 using std::placeholders::_1;
@@ -142,6 +146,8 @@ private:
 
   void move_robot() {
     RCLCPP_INFO(get_logger(), "Starting final approach move");
+    sleep_for(nanoseconds(10));
+    sleep_until(system_clock::now() + seconds(1));
 
     while (!approach_completed_) {
       geometry_msgs::msg::TransformStamped transform_odom_to_robot;
