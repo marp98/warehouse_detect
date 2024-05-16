@@ -12,6 +12,12 @@ find_package(rclcpp_components REQUIRED)
 find_package(composition REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -29,11 +35,7 @@ include_directories(include)
 
 add_library(preapproach_component SHARED src/preapproach_component.cpp)
 target_compile_definitions(preapproach_component PRIVATE "COMPOSITION_BUILDING_DLL")
-ament_target_dependencies(preapproach_component
-  "rclcpp"
-  "rclcpp_components"
-  "geometry_msgs"
-  "sensor_msgs")
+ament_target_dependencies(preapproach_component "rclcpp" "rclcpp_components" "geometry_msgs" "sensor_msgs" "nav_msgs" "tf2" "tf2_ros" "tf2_geometry_msgs" "std_msgs")
 rclcpp_components_register_nodes(preapproach_component "my_components::PreApproach")
 set(node_plugins "${node_plugins}my_components::PreApproach;$<TARGET_FILE:preapproach_component>\n")
 
