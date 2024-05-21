@@ -31,8 +31,7 @@ PreApproach::PreApproach(const rclcpp::NodeOptions & options)
         "/odom", 10, std::bind(&PreApproach::odomCallback, this, std::placeholders::_1));
 }
 
-void PreApproach::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
-{
+void PreApproach::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
     if (is_rotating_) {
         if (!start_pose_set_) {
             start_pose_ = msg->pose.pose;
@@ -49,14 +48,15 @@ void PreApproach::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
         double roll, pitch, yaw;
         m.getRPY(roll, pitch, yaw);
 
-        double yaw_tolerance = 0.01;
+        double yaw_tolerance = 0.007;
 
         if (std::abs(yaw - target_yaw_) < yaw_tolerance) {
             stopRobot();
             is_rotating_ = false;
-            RCLCPP_INFO(this->get_logger(), "Rotation completed. Terminating the program");
+            RCLCPP_INFO(this->get_logger(), "Rotation completed. Stopping the robot.");
             RCLCPP_INFO(this->get_logger(), "Final Yaw: %.2f", yaw);
-            rclcpp::shutdown();
+
+            laser_sub_.reset();
         } else {
             rotateRobot();
         }

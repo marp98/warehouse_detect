@@ -19,7 +19,7 @@ private:
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
     bool is_rotating_ = false;
-    double obstacle_distance_ = 0.3;
+    double obstacle_distance_ = 0.36;
     double rotation_degrees_;
     bool start_pose_set_;
     double target_yaw_;

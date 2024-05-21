@@ -17,7 +17,7 @@ AttachServer::AttachServer(const rclcpp::NodeOptions &options)
   // Initialize member variables
   kp_distance_ = 0.0;
   kp_yaw_ = 1.4;
-  distance_threshold_ = 0.1;
+  distance_threshold_ = 0.3;
   approach_completed_ = false;
 
   // Create service
@@ -40,7 +40,11 @@ AttachServer::AttachServer(const rclcpp::NodeOptions &options)
 
 void AttachServer::approach_callback(const std::shared_ptr<GoToLoading::Request> request,
                     const std::shared_ptr<GoToLoading::Response> response) {
+    RCLCPP_INFO(get_logger(),
+                    "Starting server response");
     if (request->attach_to_shelf == true) {
+      RCLCPP_INFO(get_logger(),
+                    "Will continue.");
       leg_locations_.clear();
       if (detect_shelf_legs()) {
         RCLCPP_INFO(get_logger(), "Leg locations:");
@@ -58,7 +62,7 @@ void AttachServer::approach_callback(const std::shared_ptr<GoToLoading::Request>
         geometry_msgs::msg::TransformStamped odom_to_robot_transform;
         try {
             odom_to_robot_transform = tf_buffer_->lookupTransform(
-                "robot_odom", "robot_base_link", tf2::TimePointZero);
+                "odom", "robot_base_link", tf2::TimePointZero);
         } catch (const tf2::TransformException &ex) {
             RCLCPP_ERROR(get_logger(), "Could not get transform from robot_odom to robot_base_link: %s", ex.what());
             return;
@@ -84,7 +88,7 @@ void AttachServer::approach_callback(const std::shared_ptr<GoToLoading::Request>
 
         geometry_msgs::msg::TransformStamped transform;
         transform.header.stamp = now();
-        transform.header.frame_id = "robot_odom";
+        transform.header.frame_id = "odom";
         transform.child_frame_id = "cart_frame";
         transform.transform.translation.x = center_odom_frame.x();
         transform.transform.translation.y = center_odom_frame.y();
@@ -129,7 +133,7 @@ void AttachServer::move_robot() {
       geometry_msgs::msg::TransformStamped transform_odom_to_robot;
       try {
         transform_odom_to_robot = tf_buffer_->lookupTransform(
-            "robot_odom", "robot_base_link", tf2::TimePointZero);
+            "odom", "robot_base_link", tf2::TimePointZero);
       } catch (const tf2::TransformException &ex) {
         RCLCPP_ERROR(get_logger(), "Could not get transform: %s", ex.what());
         return;
@@ -147,7 +151,7 @@ void AttachServer::move_robot() {
       geometry_msgs::msg::TransformStamped transform_odom_to_cart;
       try {
         transform_odom_to_cart = tf_buffer_->lookupTransform(
-            "robot_odom", "cart_frame", tf2::TimePointZero);
+            "odom", "cart_frame", tf2::TimePointZero);
       } catch (const tf2::TransformException &ex) {
         RCLCPP_ERROR(get_logger(), "Could not get transform: %s", ex.what());
         return;
