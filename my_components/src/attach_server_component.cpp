@@ -53,8 +53,8 @@ void AttachServer::approach_callback(const std::shared_ptr<GoToLoading::Request>
                       leg_locations_[i], leg_locations_[i + 1]);
         }
 
-        float center_x = (leg_locations_[0] + leg_locations_[2]) / 2.0;
-        float center_y = (leg_locations_[1] + leg_locations_[3]) / 2.0;
+        float center_x = (leg_locations_[0] + leg_locations_[2]) / 2.0 + 0.14;
+        float center_y = 0.0;
 
         RCLCPP_INFO(get_logger(), "Center location: x = %.2f, y = %.2f",
                     center_x, center_y);
@@ -145,8 +145,8 @@ void AttachServer::move_robot() {
       double error_yaw_odom_to_robot =
           atan2(transform_odom_to_robot.transform.translation.y,
                 transform_odom_to_robot.transform.translation.x);
-      RCLCPP_INFO(get_logger(), "Distance odom to robot: %f",
-                  dist_odom_to_robot);
+    //   RCLCPP_INFO(get_logger(), "Distance odom to robot: %f",
+    //               dist_odom_to_robot);
 
       geometry_msgs::msg::TransformStamped transform_odom_to_cart;
       try {
@@ -163,7 +163,7 @@ void AttachServer::move_robot() {
       double error_yaw_odom_to_cart =
           atan2(transform_odom_to_cart.transform.translation.y,
                 transform_odom_to_cart.transform.translation.x);
-      RCLCPP_INFO(get_logger(), "Distance odom to cart: %f", dist_odom_to_cart);
+    //   RCLCPP_INFO(get_logger(), "Distance odom to cart: %f", dist_odom_to_cart);
 
       double angular_velocity = kp_yaw_ * error_yaw_odom_to_robot;
       double linear_velocity = 0.0;
@@ -172,7 +172,7 @@ void AttachServer::move_robot() {
           sqrt(pow(dist_odom_to_robot, 2) + pow(dist_odom_to_cart, 2) -
                2 * dist_odom_to_robot * dist_odom_to_cart *
                    cos(error_yaw_odom_to_cart - error_yaw_odom_to_robot));
-      RCLCPP_INFO(get_logger(), "Distance: %f", dist_robot_to_cart);
+    //   RCLCPP_INFO(get_logger(), "Distance: %f", dist_robot_to_cart);
 
       if (dist_robot_to_cart > distance_threshold_) {
         kp_distance_ = 1.06;
@@ -185,7 +185,7 @@ void AttachServer::move_robot() {
         extra_twist.linear.x = 0.3;  
         extra_twist.angular.z = 0.0;
 
-        double extra_distance = 0.9;  
+        double extra_distance = 0.7;  
         double moved_distance = 0.0;
         rclcpp::Rate extra_rate(10);  
 
